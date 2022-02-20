@@ -18,7 +18,7 @@ contract("CactusTreasury", (accounts) => {
   let treasury;
 
   before(async () => {
-    token = await CactusToken.new();
+    token = await CactusToken.new(accounts[5], 100, 100);
     treasury = await CactusTreasury.new(token.address);
     await token.setTreasuryAddress(treasury.address);
   });

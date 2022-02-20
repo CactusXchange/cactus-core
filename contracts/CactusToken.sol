@@ -9,30 +9,31 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
-    struct HolderInfo {
-        uint256 total;
-        uint256 monthlyCredit;
-        uint256 amountLocked;
-        uint256 nextPaymentUntil;
-    }
+import "./extensions/BaseToken.sol";
 
+contract CactusToken is
+    Context,
+    IERC20,
+    BaseToken,
+    IERC20Metadata,
+    Ownable,
+    Pausable
+{
     mapping(address => uint256) private _balances;
-
     mapping(address => mapping(address => uint256)) private _allowances;
+
     mapping(address => HolderInfo) private _whitelistInfo;
     address[] private _whitelist;
-    mapping(address => HolderInfo) private _publicListInfo;
-    address[] private _publiclist;
     uint256 private _newPaymentInterval = 2592000;
     uint256 private _whitelistHoldingCap = 96000 * 10**18;
     uint256 private _cattPerBNB = 9600; // current price as per the time of private sale
-
-    address private _saleAccount;
+    bool public openWhitelist = false;
 
     mapping(address => bool) public operators;
+
+    mapping(address => bool) private _isExcludedFromFee;
+    mapping(address => bool) private _isExcluded;
 
     uint256 private _totalSupply;
 
@@ -42,62 +43,51 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
     bool private _isRegisterAirdropDistribution;
 
     uint256 private _cap = 120e6 * 10**18; //120,000,000
-    uint256 public constant AIRDROP_AMOUNT = 120e4 * 10**18; //1,200,000
-    uint256 public constant WHITELIST_ALLOCATION = 48e5 * 10**18; //4,800,000
-    uint256 public constant PUBLIC_SUPPLY = 6e6 * 10**18; //6,000,000
-    uint256 public constant LIQUIDITY_ALLOCATION = 6e6 * 10**18; //6,000,000
-    uint256 public constant TEAM_ALLOCATION = 12e6 * 10**18; //12,000,000
-    uint256 public constant MARKETING_RESERVE_AMOUNT = 6e6 * 10**18; //6,000,000
-    uint256 public constant STAKING_ALLOCATION = 84e6 * 10**18; //84,000,000
-
-    uint256 public aidropDistributed;
-    uint256 public whitelistSaleDistributed;
-    uint256 public publicSaleDistributed;
-    uint256 public stakingReserveUsed;
-    uint256 public liquidityReserveUsed;
-    uint256 public teamReserveUsed;
+    uint256 public maxTxFeeBps = 4500;
 
     address public treasuryContract;
     address public teamAddress;
     address public rewardingContract;
     address public stakingContract;
 
+    uint256 public _liquidityFee;
+    uint256 public _marketingFee;
+
     using SafeMath for uint256;
-
-    event TreasuryContractChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
-
-    event OperatorUpdated(address indexed operator, bool indexed status);
-
-    event TeamAddressChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
-
-    event StakingAddressChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
-
-    event RewardingContractChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
 
     modifier onlyOperator() {
         require(operators[msg.sender], "Operator: caller is not the operator");
         _;
     }
 
-    constructor() {
+    constructor(
+        address _teamAddress,
+        uint16 liquidityFeeBps_,
+        uint16 marketingFeeBps_
+    ) {
+        require(liquidityFeeBps_ >= 0, "Invalid liquidity fee");
+        require(marketingFeeBps_ >= 0, "Invalid marketing fee");
+        require(
+            liquidityFeeBps_ + marketingFeeBps_ <= maxTxFeeBps,
+            "Total fee is over 45%"
+        );
         _name = "Cactus";
         _symbol = "CACTT";
+
         uint256 amount = WHITELIST_ALLOCATION
             .add(PUBLIC_SUPPLY)
             .add(AIRDROP_AMOUNT)
             .add(LIQUIDITY_ALLOCATION);
+
+        _liquidityFee = liquidityFeeBps_;
+
+        teamAddress = _teamAddress;
+        _marketingFee = marketingFeeBps_;
+
+        // exclude owner and this contract from fee
+        _isExcludedFromFee[owner()] = true;
+        _isExcludedFromFee[address(this)] = true;
+
         updateOperator(owner(), true);
         _mint(msg.sender, amount);
     }
@@ -116,14 +106,6 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
 
     function totalSupply() public view virtual override returns (uint256) {
         return _totalSupply;
-    }
-
-    function saleAccount() public view virtual returns (address) {
-        return _saleAccount;
-    }
-
-    function setSaleAddress(address _value) public onlyOwner {
-        _saleAccount = _value;
     }
 
     function balanceOf(address account)
@@ -281,22 +263,58 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         uint256 amount
     ) internal virtual {}
 
-    function initialize(address _teamAddress, address _rewardContract) public {
-        teamAddress = _teamAddress;
+    function excludeFromFee(address account) public onlyOperator {
+        _isExcludedFromFee[account] = true;
+    }
+
+    function includeInFee(address account) public onlyOperator {
+        _isExcludedFromFee[account] = false;
+    }
+
+    function isExcludedFromFee(address account) public view returns (bool) {
+        return _isExcludedFromFee[account];
+    }
+
+    function setLiquidityFeePercent(uint256 liquidityFeeBps)
+        external
+        onlyOperator
+    {
+        _liquidityFee = liquidityFeeBps;
+        require(
+            _liquidityFee + _marketingFee <= maxTxFeeBps,
+            "Total fee is over 45%"
+        );
+    }
+
+    function setMarketingFeePercent(uint256 marketingFeeBps)
+        external
+        onlyOperator
+    {
+        _marketingFee = marketingFeeBps;
+        require(
+            _liquidityFee + _marketingFee <= maxTxFeeBps,
+            "Total fee is over 45%"
+        );
+    }
+
+    function initializeReward(address _rewardContract) public onlyOperator {
         rewardingContract = _rewardContract;
         updateOperator(rewardingContract, true);
-        _mint(rewardingContract, MARKETING_RESERVE_AMOUNT);
+        marketReserveUsed = marketReserveUsed.add(MARKETING_RESERVE_AMOUNT);
+        if (marketReserveUsed <= MARKETING_RESERVE_AMOUNT) {
+            _mint(rewardingContract, MARKETING_RESERVE_AMOUNT);
+        }
     }
 
     function mint(address to, uint256 amount) external onlyOperator {
         _mint(to, amount);
     }
 
-    function pause() public onlyOwner {
+    function pause() public onlyOperator {
         _pause();
     }
 
-    function unpause() public onlyOwner {
+    function unpause() public onlyOperator {
         _unpause();
     }
 
@@ -304,7 +322,7 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         return _cap;
     }
 
-    function updateOperator(address _operator, bool _status) public onlyOwner {
+    function updateOperator(address _operator, bool _status) public onlyOperator {
         operators[_operator] = _status;
         emit OperatorUpdated(_operator, _status);
     }
@@ -322,9 +340,7 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         _afterTokenTransfer(address(0), account, amount);
     }
 
-    function claim(address account, uint256 amount) public onlyOwner {}
-
-    function burn(address to, uint256 amount) external onlyOwner {
+    function burn(address to, uint256 amount) external onlyOperator {
         _burn(to, amount);
     }
 
@@ -334,7 +350,7 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
 
     function setTreasuryAddress(address _newAddress)
         public
-        onlyOwner
+        onlyOperator
         whenNotPaused
     {
         emit TreasuryContractChanged(treasuryContract, _newAddress);
@@ -343,7 +359,7 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
 
     function distributeAirdrop(address[] memory _receivers, uint256 _value)
         public
-        onlyOwner
+        onlyOperator
     {
         require(_isRegisterAirdropDistribution, "not registered ");
         aidropDistributed = aidropDistributed.add(
@@ -356,13 +372,13 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         }
     }
 
-    function setTeamAddress(address _newAddress) public onlyOwner {
+    function setTeamAddress(address _newAddress) public onlyOperator {
         require(_newAddress != address(0), "setDevAddress: ZERO");
         emit TeamAddressChanged(treasuryContract, _newAddress);
         teamAddress = _newAddress;
     }
 
-    function setStakingAddress(address _newAddress) public onlyOwner {
+    function setStakingAddress(address _newAddress) public onlyOperator {
         emit StakingAddressChanged(stakingContract, _newAddress);
         stakingContract = _newAddress;
         updateOperator(stakingContract, true);
@@ -386,15 +402,13 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
     }
 
     // enable airdroping
-    function registerAirdropDistribution() public onlyOwner {
+    function registerAirdropDistribution() public onlyOperator {
         require(!_isRegisterAirdropDistribution, "Already registered");
         _isRegisterAirdropDistribution = true;
     }
 
-    function registerWhitelist(address _account)
-        external
-        payable
-    {
+    function registerWhitelist(address _account) external payable {
+        require(openWhitelist, "Sale is not in session.");
         require(msg.value > 0, "Invalid amount of BNB sent!");
         uint256 _cattAmount = msg.value * _cattPerBNB;
         whitelistSaleDistributed = whitelistSaleDistributed.add(_cattAmount);
@@ -403,14 +417,18 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
             _whitelist.push(_account);
         }
         require(
+            _cattAmount <= _whitelistHoldingCap,
+            "You cannot hold more than 10BNB worth of DIBA"
+        );
+        require(
             WHITELIST_ALLOCATION >= whitelistSaleDistributed,
             "Distribution reached its max"
         );
         require(
             _whitelistHoldingCap >= holder.total.add(_cattAmount),
-            "Holding limit reached!"
+            "Amount exceeds holding limit!"
         );
-        payable(_saleAccount).transfer(msg.value);
+        payable(owner()).transfer(msg.value);
         uint256 initialPayment = _cattAmount.div(2); // Release 50% of payment
         uint256 credit = _cattAmount.div(2);
 
@@ -420,10 +438,10 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         holder.nextPaymentUntil = block.timestamp.add(_newPaymentInterval);
         _whitelistInfo[_account] = holder;
         _burn(owner(), _cattAmount);
-        _transfer(owner(), _account, initialPayment);
+        _mint(_account, initialPayment);
     }
 
-    function timelyWhitelistPaymentRelease() public onlyOwner {
+    function timelyWhitelistPaymentRelease() public onlyOperator {
         for (uint256 i = 0; i < _whitelist.length; i++) {
             HolderInfo memory holder = _whitelistInfo[_whitelist[i]];
             if (
@@ -442,54 +460,16 @@ contract CactusToken is Context, IERC20, IERC20Metadata, Ownable, Pausable {
         }
     }
 
-    function registerPubliclist(address _account)
-        external
-        payable
+    function holderInfo(address _holderAddress)
+        public
+        view
+        returns (HolderInfo memory)
     {
-        require(msg.value > 0, "Invalid amount of BNB sent!");
-        uint256 _cattAmount = msg.value * _cattPerBNB;
-        publicSaleDistributed = publicSaleDistributed.add(_cattAmount);
-        HolderInfo memory holder = _publicListInfo[_account];
-        if (holder.total <= 0) {
-            _publiclist.push(_account);
-        }
-        require(
-            PUBLIC_SUPPLY >= publicSaleDistributed,
-            "Distribution reached its max"
-        );
-        require(
-            _whitelistHoldingCap >= holder.total.add(_cattAmount),
-            "Holding limit reached!"
-        );
-        payable(_saleAccount).transfer(msg.value);
-        uint256 initialPayment = _cattAmount.div(2); // Release 50% of payment
-        uint256 credit = _cattAmount.div(2);
-
-        holder.total = holder.total.add(_cattAmount);
-        holder.amountLocked = holder.amountLocked.add(credit);
-        holder.monthlyCredit = holder.amountLocked.div(5); // divide amount locked to 5 months
-        holder.nextPaymentUntil = block.timestamp.add(_newPaymentInterval);
-        _publicListInfo[_account] = holder;
-        _burn(owner(), _cattAmount);
-        _transfer(owner(), _account, initialPayment);
+        return _whitelistInfo[_holderAddress];
     }
 
-    function timelyPubliclistPaymentRelease() public onlyOwner {
-        for (uint256 i = 0; i < _publiclist.length; i++) {
-            HolderInfo memory holder = _publicListInfo[_publiclist[i]];
-            if (
-                holder.amountLocked > 0 &&
-                block.timestamp >= holder.nextPaymentUntil
-            ) {
-                holder.amountLocked = holder.amountLocked.sub(
-                    holder.monthlyCredit
-                );
-                holder.nextPaymentUntil = block.timestamp.add(
-                    _newPaymentInterval
-                );
-                _publicListInfo[_publiclist[i]] = holder;
-                _mint(_publiclist[i], holder.monthlyCredit);
-            }
-        }
+    function setWhitelistStatus(bool status) public onlyOperator {
+        emit WhitelistStatusChanged(openWhitelist, status);
+        openWhitelist = status;
     }
 }

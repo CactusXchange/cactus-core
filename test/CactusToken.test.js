@@ -22,8 +22,7 @@ contract("CactusToken", (accounts) => {
 
   describe('CactusToken', () => {
     before(async () => {
-      token = await CactusToken.new();
-      await token.setSaleAddress(accounts[5]);
+      token = await CactusToken.new(accounts[5], 100, 100);
     });
 
     it('Check token cap', async () => {
@@ -69,24 +68,12 @@ contract("CactusToken", (accounts) => {
 
   describe("Whitelist sale", () => {
     before(async () => {
-      token = await CactusToken.new();
-      await token.setSaleAddress(accounts[5]);
+      token = await CactusToken.new(accounts[5], 100, 100);
     });
 
     it("Register whitelist", async function () {
+      await token.setWhitelistStatus(true);
       await token.registerWhitelist(accounts[2], { from: accounts[2], value: toWei(10), gas: 3000000 });
-      expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('48000');
-    });
-  });
-
-  describe("Public sale", () => {
-    before(async () => {
-      token = await CactusToken.new();
-      await token.setSaleAddress(accounts[5]);
-    });
-
-    it("Register publiclist", async function () {
-      await token.registerPubliclist(accounts[2], { from: accounts[2], value: toWei(10), gas: 3000000 });
       expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('48000');
     });
   });
