@@ -26,7 +26,8 @@ contract CactusToken is
     mapping(address => HolderInfo) private _whitelistInfo;
     address[] private _whitelist;
     uint256 private _newPaymentInterval = 2592000;
-    uint256 private _whitelistHoldingCap = 96000 * 10**18;
+    uint256 private _whitelistHoldingCap = 96000 * 10**decimals();
+     uint256 private _minimumPruchaseInBNB = 2 * 10**decimals(); // 3BNB
     uint256 private _cattPerBNB = 9600; // current price as per the time of private sale
     bool public openWhitelist = false;
 
@@ -78,6 +79,7 @@ contract CactusToken is
             .add(PUBLIC_SUPPLY)
             .add(AIRDROP_AMOUNT)
             .add(LIQUIDITY_ALLOCATION);
+        _mint(msg.sender, amount);
 
         _liquidityFee = liquidityFeeBps_;
 
@@ -88,8 +90,8 @@ contract CactusToken is
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
 
-        updateOperator(owner(), true);
-        _mint(msg.sender, amount);
+        operators[owner()] = true;
+        emit OperatorUpdated(owner(), true);
     }
 
     function name() public view virtual override returns (string memory) {
@@ -416,6 +418,10 @@ contract CactusToken is
         if (holder.total <= 0) {
             _whitelist.push(_account);
         }
+        require(
+            msg.value >= _minimumPruchaseInBNB,
+            "Minimum amount to buy is 2BNB"
+        );
         require(
             _cattAmount <= _whitelistHoldingCap,
             "You cannot hold more than 10BNB worth of DIBA"
