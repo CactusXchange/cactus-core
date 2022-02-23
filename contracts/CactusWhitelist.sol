@@ -29,6 +29,8 @@ contract CactusWhitelist is Ownable {
         uint256 monthlyCredit;
         uint256 amountLocked;
         uint256 nextPaymentUntil;
+        uint256 initial;
+        bool payedInitial;
     }
 
     constructor(ICactusToken _cactt) {
@@ -86,9 +88,22 @@ contract CactusWhitelist is Ownable {
         holder.amountLocked = holder.amountLocked.add(credit);
         holder.monthlyCredit = holder.amountLocked.div(5); // divide amount locked to 5 months
         holder.nextPaymentUntil = block.timestamp.add(_newPaymentInterval);
+        holder.payedInitial = false;
+        holder.initial = initialPayment;
         _whitelistInfo[_account] = holder;
         cactt.burn(owner(), _cattAmount);
-        cactt.mint(_account, initialPayment);
+    }
+
+    function initialPaymentRelease() public onlyOperator {
+        for (uint256 i = 0; i < _whitelist.length; i++) {
+            HolderInfo memory holder = _whitelistInfo[_whitelist[i]];
+            if (!holder.payedInitial) {
+                uint256 amount = holder.initial;
+                holder.payedInitial = true;
+                holder.initial = 0;
+                cactt.mint(_whitelist[i], amount);
+            }
+        }
     }
 
     function timelyWhitelistPaymentRelease() public onlyOperator {

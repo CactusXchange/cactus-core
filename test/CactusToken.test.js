@@ -85,6 +85,13 @@ contract("CactusToken", (accounts) => {
     it("Register whitelist", async function () {
       await whitelist.setWhitelistStatus(true);
       await whitelist.registerWhitelist(accounts[2], { from: accounts[2], value: toWei(10), gas: 3000000 });
+      expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('0');
+    });
+
+    it("Release initial payment", async function () {
+      console.log(await whitelist.holderInfo(accounts[2]));
+      await whitelist.initialPaymentRelease();
+      console.log(await whitelist.holderInfo(accounts[2]));
       expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('48000');
     });
   });

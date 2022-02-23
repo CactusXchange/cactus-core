@@ -19,8 +19,6 @@ abstract contract BaseToken is Pausable, Ownable {
 
     address public treasuryContract;
 
-    bool public openWhitelist = false;
-
     mapping(address => bool) public operators;
 
     event TreasuryContractChanged(

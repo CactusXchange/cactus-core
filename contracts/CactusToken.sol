@@ -100,8 +100,16 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         return true;
     }
 
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
     function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
-        _transfer(sender, recipient, amount);
+         _transfer(sender, recipient, amount);
 
         uint256 currentAllowance = _allowances[sender][_msgSender()];
         require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
@@ -281,7 +289,11 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         emit Transfer(account, address(0), amount);
     }
 
-    function mint(address receiver, uint256 amount) public onlyOperator {
+    function mint(address to, uint256 amount) external onlyOperator {
+        _mint(to, amount);
+    }
+
+    function _mint(address receiver, uint256 amount) internal virtual {
         require(totalSupply() + amount <= cap(), "ERC20Capped: cap exceeded");
         require(receiver != address(0), "ERC20: mint to the zero address");
         uint256 _rate = _getRate();
@@ -292,14 +304,6 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
             _tOwned[receiver] = _tOwned[receiver].add(amount);
         }
         emit Transfer(address(0), receiver, amount);
-    }
-
-    function _approve(address owner, address spender, uint256 amount) internal virtual {
-        require(owner != address(0), "ERC20: approve from the zero address");
-        require(spender != address(0), "ERC20: approve to the zero address");
-
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
     }
 
     function excludeFromFee(address account) public onlyOperator {
@@ -374,15 +378,8 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     function transferLiquidityOwnership(address newAddress) public onlyOperator {
       uint256 balance = balanceOf(liquidityAddress);
       if(balance > 0){
-        (uint256 rAmount, uint256 rTransferAmount, uint256 tTransferAmount, , , ,) = _getValues(balance);
-        _rOwned[liquidityAddress] = _rOwned[liquidityAddress].sub(rAmount);
-        _rOwned[newAddress] = _rOwned[newAddress].add(rTransferAmount);
-        if (_tOwned[liquidityAddress] > 0){
-          _tOwned[liquidityAddress] = _tOwned[liquidityAddress].sub(balance);
-          _tOwned[newAddress] = _tOwned[newAddress].add(tTransferAmount);
-
-        }
-         emit Transfer(liquidityAddress, liquidityAddress, tTransferAmount);
+        _approve(liquidityAddress, _msgSender(), balance);
+        transferFrom(liquidityAddress, newAddress, balance);
       }
       liquidityAddress = newAddress;
       excludeFromFee(liquidityAddress);
