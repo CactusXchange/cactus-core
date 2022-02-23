@@ -11,6 +11,7 @@ function sleep(ms) {
 }
 
 const CactusToken = artifacts.require("CactusToken");
+const CactusWhitelist = artifacts.require("CactusWhitelist");
 
 require("chai")
   .use(require("chai-as-promised"))
@@ -22,7 +23,7 @@ contract("CactusToken", (accounts) => {
 
   describe('CactusToken', () => {
     before(async () => {
-      token = await CactusToken.new(accounts[5], 100, 100);
+      token = await CactusToken.new(accounts[5], 150, 200, 150);
     });
 
     it('Check token cap', async () => {
@@ -50,6 +51,14 @@ contract("CactusToken", (accounts) => {
       expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('2');
     });
 
+    it("Should mint token", async function () {
+      const totalSupply = await token.totalSupply();
+      await token.mint(accounts[0], toWei(200));
+      expect(bn2String(await token.totalSupply())).to.equal(
+        (Number(bn2String(totalSupply)) + 200).toString()
+      );
+    });
+
     it("Should burn token", async function () {
       const totalSupply = await token.totalSupply();
       await token.burn(accounts[0], toWei(200));
@@ -57,23 +66,18 @@ contract("CactusToken", (accounts) => {
         (Number(bn2String(totalSupply)) - 200).toString()
       );
     });
-
-    it("Distribute airdrop", async function () {
-      await token.registerAirdropDistribution();
-      await token.distributeAirdrop([accounts[1]], toWei(500));
-      expect(bn2String(await token.aidropDistributed())).to.equal('500');
-      expect(bn2String(await token.balanceOf(accounts[1]))).to.equal('500');
-    });
   });
 
   describe("Whitelist sale", () => {
     before(async () => {
-      token = await CactusToken.new(accounts[5], 100, 100);
+      token = await CactusToken.new(accounts[5], 150, 200, 150);
+      whitelist = await CactusWhitelist.new(token.address);
+      await token.updateOperator(whitelist.address, true);
     });
 
     it("Register whitelist", async function () {
-      await token.setWhitelistStatus(true);
-      await token.registerWhitelist(accounts[2], { from: accounts[2], value: toWei(10), gas: 3000000 });
+      await whitelist.setWhitelistStatus(true);
+      await whitelist.registerWhitelist(accounts[2], { from: accounts[2], value: toWei(10), gas: 3000000 });
       expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('48000');
     });
   });

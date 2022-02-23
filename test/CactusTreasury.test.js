@@ -18,9 +18,10 @@ contract("CactusTreasury", (accounts) => {
   let treasury;
 
   before(async () => {
-    token = await CactusToken.new(accounts[5], 100, 100);
+    token = await CactusToken.new(accounts[5], 150, 200, 150);
     treasury = await CactusTreasury.new(token.address);
-    await token.setTreasuryAddress(treasury.address);
+    await token.updateOperator(treasury.address, true);
+    await token.updateOperator(accounts[0], true);
   });
 
   describe('CactusTreasury', () => {
@@ -32,5 +33,17 @@ contract("CactusTreasury", (accounts) => {
       await token.transfer(treasury.address, toWei(1000));
       expect(bn2String(await treasury.balance())).to.equal('1000');
     });
+
+    it("Distribute airdrop", async function () {
+      await treasury.registerAirdropDistribution();
+      await treasury.distributeAirdrop(accounts[1], toWei(500));
+      expect(bn2String(await treasury.aidropDistributed())).to.equal('500');
+      expect(bn2String(await token.balanceOf(accounts[1]))).to.equal('500');
+    });
+
+    it("Mint team funds", async function () {
+      await treasury.teamMint(toWei(1000));
+      expect(bn2String(await token.balanceOf(accounts[5]))).to.equal('1000');
+    });    
   });
 });

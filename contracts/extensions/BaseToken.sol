@@ -1,7 +1,10 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-abstract contract BaseToken {
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+abstract contract BaseToken is Pausable, Ownable {
     uint256 public constant AIRDROP_AMOUNT = 120e4 * 10**18; //1,200,000
     uint256 public constant WHITELIST_ALLOCATION = 48e5 * 10**18; //4,800,000
     uint256 public constant PUBLIC_SUPPLY = 6e6 * 10**18; //6,000,000
@@ -10,20 +13,16 @@ abstract contract BaseToken {
     uint256 public constant MARKETING_RESERVE_AMOUNT = 6e6 * 10**18; //6,000,000
     uint256 public constant STAKING_ALLOCATION = 84e6 * 10**18; //84,000,000
 
-    uint256 public aidropDistributed;
-    uint256 public whitelistSaleDistributed;
-    uint256 public publicSaleDistributed;
-    uint256 public stakingReserveUsed;
+    uint256 private _cap = 120e6 * 10**18; //120,000,000
+
     uint256 public liquidityReserveUsed;
-    uint256 public teamReserveUsed;
     uint256 public marketReserveUsed;
 
-    struct HolderInfo {
-        uint256 total;
-        uint256 monthlyCredit;
-        uint256 amountLocked;
-        uint256 nextPaymentUntil;
-    }
+    address public treasuryContract;
+
+    bool public openWhitelist = false;
+
+    mapping(address => bool) public operators;
 
     event TreasuryContractChanged(
         address indexed previusAAddress,
@@ -37,18 +36,39 @@ abstract contract BaseToken {
         address indexed newAddress
     );
 
-    event StakingAddressChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
-
     event RewardingContractChanged(
         address indexed previusAAddress,
         address indexed newAddress
     );
 
-    event WhitelistStatusChanged(
-        bool indexed previusState,
-        bool indexed newState
-    );
+    modifier onlyOperator() {
+        require(operators[msg.sender], "Operator: caller is not the operator");
+        _;
+    }
+
+    function cap() public view virtual returns (uint256) {
+        return _cap;
+    }
+
+    function pause() public onlyOperator {
+        _pause();
+    }
+
+    function unpause() public onlyOperator {
+        _unpause();
+    }
+
+    function updateOperator(address _operator, bool _status) public onlyOperator {
+        operators[_operator] = _status;
+        emit OperatorUpdated(_operator, _status);
+    }
+
+    function setTreasuryAddress(address _newAddress) public onlyOperator whenNotPaused {
+        emit TreasuryContractChanged(treasuryContract, _newAddress);
+        treasuryContract = _newAddress;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner();
+    }
 }

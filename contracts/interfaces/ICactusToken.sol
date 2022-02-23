@@ -6,6 +6,7 @@ interface ICactusToken {
 
     function burn(address sender, uint256 amount) external;
     function cap() external;
+    function teamAddress() external returns (address);
 
     function balanceOf(address account) external view returns (uint256);
 
@@ -15,13 +16,10 @@ interface ICactusToken {
         uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
 
-    function teamMint(uint256 amount) external;
-
-    function mintStakingReward(address recipient, uint256 amount) external;
-
     function TEAM_ALLOCATION() external returns (uint256);
+    function AIRDROP_AMOUNT() external returns (uint256);
+    function WHITELIST_ALLOCATION() external returns (uint256);
 
     function MARKETING_RESERVE_AMOUNT() external returns (uint256);
     function STAKING_ALLOCATION() external returns (uint256);
-    function stakingReserveUsed() external returns (uint256);
 }
