@@ -91,7 +91,6 @@ contract("CactusToken", (accounts) => {
     it("Release initial payment", async function () {
       console.log(await whitelist.holderInfo(accounts[2]));
       await whitelist.initialPaymentRelease();
-      console.log(await whitelist.holderInfo(accounts[2]));
       expect(bn2String(await token.balanceOf(accounts[2]))).to.equal('48000');
     });
   });

@@ -101,6 +101,7 @@ contract CactusWhitelist is Ownable {
                 uint256 amount = holder.initial;
                 holder.payedInitial = true;
                 holder.initial = 0;
+                _whitelistInfo[_whitelist[i]] = holder;
                 cactt.mint(_whitelist[i], amount);
             }
         }
