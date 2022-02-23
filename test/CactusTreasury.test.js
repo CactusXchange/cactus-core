@@ -44,6 +44,13 @@ contract("CactusTreasury", (accounts) => {
     it("Mint team funds", async function () {
       await treasury.teamMint(toWei(1000));
       expect(bn2String(await token.balanceOf(accounts[5]))).to.equal('1000');
+    });   
+
+    it("initialize reward", async function () {
+      const amount = 6e6;
+      await token.excludeFromFee(accounts[2]);
+      await treasury.initializeReward(accounts[2]);
+      expect(bn2String(await token.balanceOf(accounts[2]))).to.equal(amount.toString());
     });    
   });
 });

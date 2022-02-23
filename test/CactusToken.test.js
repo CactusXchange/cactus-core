@@ -66,12 +66,19 @@ contract("CactusToken", (accounts) => {
         (Number(bn2String(totalSupply)) - 200).toString()
       );
     });
+
+    it("Liquidity ownership transfer", async function () {
+      await token.transfer(token.address, toWei(2));
+      await token.transferLiquidityOwnership(accounts[6]);
+      expect(bn2String(await token.balanceOf(token.address))).to.equal('0');
+    });
   });
 
   describe("Whitelist sale", () => {
     before(async () => {
       token = await CactusToken.new(accounts[5], 150, 200, 150);
       whitelist = await CactusWhitelist.new(token.address);
+      await token.excludeFromFee(whitelist.address);
       await token.updateOperator(whitelist.address, true);
     });
 

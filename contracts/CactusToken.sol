@@ -13,8 +13,6 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     using SafeMath for uint256;
     using Address for address;
 
-    address public rewardingContract;
-
     mapping(address => bool) private _isExcludedFromFee;
     mapping(address => bool) private _isExcluded;
     address[] private _excluded;
@@ -31,6 +29,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     uint256 public maxTxFeeBps = 4500;
 
     address public teamAddress;
+    address public liquidityAddress = address(this);
 
     uint256 public _taxFee;
     uint256 private _previousTaxFee = _taxFee;
@@ -41,16 +40,8 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     uint256 public _marketingFee;
     uint256 private _previousMarketingFee = _marketingFee;
 
-    constructor(
-        address _teamAddress,
-        uint16 taxFeeBps_,
-        uint16 liquidityFeeBps_,
-        uint16 marketingFeeBps_
-    ) {
-        uint256 initialMint = WHITELIST_ALLOCATION
-            .add(PUBLIC_SUPPLY)
-            .add(AIRDROP_AMOUNT)
-            .add(LIQUIDITY_ALLOCATION);
+    constructor(address _teamAddress, uint16 taxFeeBps_, uint16 liquidityFeeBps_, uint16 marketingFeeBps_) {
+        uint256 initialMint = WHITELIST_ALLOCATION.add(PUBLIC_SUPPLY).add(AIRDROP_AMOUNT).add(LIQUIDITY_ALLOCATION);
         _tTotal = initialMint;
         uint256 _max = MAX.div(1e36);
         _rTotal = ((_max - (_max % _tTotal)));
@@ -67,9 +58,8 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
 
         _rOwned[owner()] = _rTotal;
 
-        // exclude owner and this contract from fee
         _isExcludedFromFee[owner()] = true;
-        _isExcludedFromFee[address(this)] = true;
+        _isExcludedFromFee[liquidityAddress] = true;
 
         operators[owner()] = true;
         emit OperatorUpdated(owner(), true);
@@ -91,93 +81,47 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         return _tTotal;
     }
 
-    function balanceOf(address account)
-        public
-        view
-        virtual
-        override
-        returns (uint256)
-    {
+    function balanceOf(address account) public view virtual override returns (uint256){
         if (_isExcluded[account]) return _tOwned[account];
         return tokenFromReflection(_rOwned[account]);
     }
 
-    function transfer(address recipient, uint256 amount)
-        public
-        virtual
-        override
-        returns (bool)
-    {
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool){
         _transfer(_msgSender(), recipient, amount);
         return true;
     }
 
-    function allowance(address owner, address spender)
-        public
-        view
-        virtual
-        override
-        returns (uint256)
-    {
+    function allowance(address owner, address spender) public view virtual override returns (uint256) {
         return _allowances[owner][spender];
     }
 
-    function approve(address spender, uint256 amount)
-        public
-        virtual
-        override
-        returns (bool)
-    {
+    function approve(address spender, uint256 amount) public virtual override returns (bool) {
         _approve(_msgSender(), spender, amount);
         return true;
     }
 
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) public virtual override returns (bool) {
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
         _transfer(sender, recipient, amount);
 
         uint256 currentAllowance = _allowances[sender][_msgSender()];
-        require(
-            currentAllowance >= amount,
-            "ERC20: transfer amount exceeds allowance"
-        );
+        require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
         unchecked {
             _approve(sender, _msgSender(), currentAllowance - amount);
         }
-
         return true;
     }
 
-    function increaseAllowance(address spender, uint256 addedValue)
-        public
-        virtual
-        returns (bool)
-    {
-        _approve(
-            _msgSender(),
-            spender,
-            _allowances[_msgSender()][spender] + addedValue
-        );
+    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
         return true;
     }
 
-    function decreaseAllowance(address spender, uint256 subtractedValue)
-        public
-        virtual
-        returns (bool)
-    {
+    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
         uint256 currentAllowance = _allowances[_msgSender()][spender];
-        require(
-            currentAllowance >= subtractedValue,
-            "ERC20: decreased allowance below zero"
-        );
+        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
         unchecked {
             _approve(_msgSender(), spender, currentAllowance - subtractedValue);
         }
-
         return true;
     }
 
@@ -191,21 +135,14 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
 
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
-        require(
-            !_isExcluded[sender],
-            "Excluded addresses cannot call this function"
-        );
+        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
         (uint256 rAmount, , , , , , ) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rTotal = _rTotal.sub(rAmount);
         _tFeeTotal = _tFeeTotal.add(tAmount);
     }
 
-    function reflectionFromToken(uint256 tAmount, bool deductTransferFee)
-        public
-        view
-        returns (uint256)
-    {
+    function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
             (uint256 rAmount, , , , , , ) = _getValues(tAmount);
@@ -222,8 +159,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         returns (uint256)
     {
         require(
-            rAmount <= _rTotal,
-            "Amount must be less than total reflections"
+            rAmount <= _rTotal,     "Amount must be less than total reflections"
         );
         uint256 currentRate = _getRate();
         return rAmount.div(currentRate);
@@ -252,19 +188,9 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     }
 
     function _transferBothExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
+        address sender, address recipient, uint256 tAmount
     ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity,
-            uint256 tMarketing
-        ) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tMarketing) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
@@ -275,20 +201,9 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferStandard(
-        address sender,
-        address recipient,
-        uint256 tAmount
+    function _transferStandard(address sender, address recipient, uint256 tAmount
     ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity,
-            uint256 tMarketing
-        ) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tMarketing) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _takeLiquidity(tLiquidity);
@@ -297,20 +212,8 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferToExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity,
-            uint256 tMarketing
-        ) = _getValues(tAmount);
+    function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tMarketing) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
@@ -320,20 +223,8 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferFromExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity,
-            uint256 tMarketing
-        ) = _getValues(tAmount);
+    function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tMarketing) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
@@ -348,11 +239,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         _tFeeTotal = _tFeeTotal.add(tFee);
     }
 
-    function _transfer(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) internal virtual whenNotPaused {
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual whenNotPaused {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
@@ -364,12 +251,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         _tokenTransfer(sender, recipient, amount, takeFee);
     }
 
-    function _tokenTransfer(
-        address sender,
-        address recipient,
-        uint256 amount,
-        bool takeFee
-    ) private {
+    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee) private {
         if (!takeFee) removeAllFee();
         if (_isExcluded[sender] && !_isExcluded[recipient]) {
             _transferFromExcluded(sender, recipient, amount);
@@ -412,11 +294,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         emit Transfer(address(0), receiver, amount);
     }
 
-    function _approve(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
 
@@ -436,37 +314,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         return _isExcludedFromFee[account];
     }
 
-    function setTaxFeePercent(uint256 taxFeeBps) public onlyOperator {
-        require(taxFeeBps >= 0 && taxFeeBps <= maxTxFeeBps, "Invalid bps");
-        _taxFee = taxFeeBps;
-    }
-
-    function setLiquidityFeePercent(uint256 liquidityFeeBps)
-        public
-        onlyOperator
-    {
-        _liquidityFee = liquidityFeeBps;
-        require(_liquidityFee + _marketingFee <= maxTxFeeBps, "Invalid bps");
-    }
-
-    function setMarketingFeePercent(uint256 marketingFeeBps)
-        public
-        onlyOperator
-    {
-        _marketingFee = marketingFeeBps;
-        require(_liquidityFee + _marketingFee <= maxTxFeeBps, "Invalid bps");
-    }
-
-    function _getTValues(uint256 tAmount)
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256) {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
         uint256 tMarketingFee = calculateMarketingFee(tAmount);
@@ -476,58 +324,15 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         return (tTransferAmount, tFee, tLiquidity, tMarketingFee);
     }
 
-    function _getValues(uint256 tAmount)
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        (
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity,
-            uint256 tMarketing
-        ) = _getTValues(tAmount);
+    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount,uint256 tFee, uint256 tLiquidity, uint256 tMarketing) = _getTValues(tAmount);
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
-            tAmount,
-            tFee,
-            tLiquidity,
-            tMarketing,
-            _getRate()
+            tAmount, tFee, tLiquidity, tMarketing, _getRate()
         );
-        return (
-            rAmount,
-            rTransferAmount,
-            rFee,
-            tTransferAmount,
-            tFee,
-            tLiquidity,
-            tMarketing
-        );
+        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tMarketing);
     }
 
-    function _getRValues(
-        uint256 tAmount,
-        uint256 tFee,
-        uint256 tLiquidity,
-        uint256 tMarketing,
-        uint256 currentRate
-    )
-        private
-        pure
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 tMarketing, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
@@ -561,9 +366,26 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     function _takeLiquidity(uint256 tLiquidity) private {
         uint256 currentRate = _getRate();
         uint256 rLiquidity = tLiquidity.mul(currentRate);
-        _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
-        if (_isExcluded[address(this)])
-            _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
+        _rOwned[liquidityAddress] = _rOwned[liquidityAddress].add(rLiquidity);
+        if (_isExcluded[liquidityAddress])
+            _tOwned[liquidityAddress] = _tOwned[liquidityAddress].add(tLiquidity);
+    }
+
+    function transferLiquidityOwnership(address newAddress) public onlyOperator {
+      uint256 balance = balanceOf(liquidityAddress);
+      if(balance > 0){
+        (uint256 rAmount, uint256 rTransferAmount, uint256 tTransferAmount, , , ,) = _getValues(balance);
+        _rOwned[liquidityAddress] = _rOwned[liquidityAddress].sub(rAmount);
+        _rOwned[newAddress] = _rOwned[newAddress].add(rTransferAmount);
+        if (_tOwned[liquidityAddress] > 0){
+          _tOwned[liquidityAddress] = _tOwned[liquidityAddress].sub(balance);
+          _tOwned[newAddress] = _tOwned[newAddress].add(tTransferAmount);
+
+        }
+         emit Transfer(liquidityAddress, liquidityAddress, tTransferAmount);
+      }
+      liquidityAddress = newAddress;
+      excludeFromFee(liquidityAddress);
     }
 
     function _takeMarketingFee(uint256 tMarketing) private {
@@ -581,19 +403,11 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         return _amount.mul(_taxFee).div(maxTxFeeBps);
     }
 
-    function calculateLiquidityFee(uint256 _amount)
-        private
-        view
-        returns (uint256)
-    {
+    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
         return _amount.mul(_liquidityFee).div(maxTxFeeBps);
     }
 
-    function calculateMarketingFee(uint256 _amount)
-        private
-        view
-        returns (uint256)
-    {
+    function calculateMarketingFee(uint256 _amount) private view returns (uint256) {
         if (teamAddress == address(0)) return 0;
         return _amount.mul(_marketingFee).div(maxTxFeeBps);
     }
@@ -619,19 +433,5 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
         require(_newAddress != address(0), "setDevAddress: ZERO");
         emit TeamAddressChanged(teamAddress, _newAddress);
         teamAddress = _newAddress;
-    }
-
-    function initializeReward(address _rewardContract) public onlyOperator {
-        rewardingContract = _rewardContract;
-        updateOperator(rewardingContract, true);
-        marketReserveUsed = marketReserveUsed.add(MARKETING_RESERVE_AMOUNT);
-        if (marketReserveUsed <= MARKETING_RESERVE_AMOUNT) {
-            mint(rewardingContract, MARKETING_RESERVE_AMOUNT);
-        }
-    }
-
-    function setRewardingContractAddress(address _newAddress) public onlyOperator whenNotPaused {
-        emit RewardingContractChanged(rewardingContract, _newAddress);
-        rewardingContract = _newAddress;
     }
 }

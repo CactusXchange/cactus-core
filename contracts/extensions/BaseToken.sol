@@ -16,7 +16,6 @@ abstract contract BaseToken is Pausable, Ownable {
     uint256 private _cap = 120e6 * 10**18; //120,000,000
 
     uint256 public liquidityReserveUsed;
-    uint256 public marketReserveUsed;
 
     address public treasuryContract;
 
@@ -32,11 +31,6 @@ abstract contract BaseToken is Pausable, Ownable {
     event OperatorUpdated(address indexed operator, bool indexed status);
 
     event TeamAddressChanged(
-        address indexed previusAAddress,
-        address indexed newAddress
-    );
-
-    event RewardingContractChanged(
         address indexed previusAAddress,
         address indexed newAddress
     );

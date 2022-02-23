@@ -11,10 +11,12 @@ contract CactusTreasury is Ownable {
     ICactusToken public cactt;
 
     address public stakingContract;
+    address public rewardingContract;
 
     uint256 public aidropDistributed;
     uint256 public stakingReserveUsed;
     uint256 public teamReserveUsed;
+    uint256 public marketReserveUsed;
 
     mapping(address => bool) public operators;
     bool private _isRegisterAirdropDistribution;
@@ -33,6 +35,11 @@ contract CactusTreasury is Ownable {
     event OperatorUpdated(address indexed operator, bool indexed status);
 
     event StakingAddressChanged(
+        address indexed previusAAddress,
+        address indexed newAddress
+    );
+
+    event RewardingContractChanged(
         address indexed previusAAddress,
         address indexed newAddress
     );
@@ -63,7 +70,10 @@ contract CactusTreasury is Ownable {
         cactt.mint(_receiver, _value);
     }
 
-    function updateOperator(address _operator, bool _status) public onlyOperator {
+    function updateOperator(address _operator, bool _status)
+        public
+        onlyOperator
+    {
         operators[_operator] = _status;
         emit OperatorUpdated(_operator, _status);
     }
@@ -94,5 +104,21 @@ contract CactusTreasury is Ownable {
         emit StakingAddressChanged(stakingContract, _newAddress);
         stakingContract = _newAddress;
         updateOperator(stakingContract, true);
+    }
+
+    function initializeReward(address _rewardContract) public onlyOperator {
+        setStakingAddress(_rewardContract);
+        marketReserveUsed = marketReserveUsed.add(cactt.MARKETING_RESERVE_AMOUNT());
+        if (marketReserveUsed <= cactt.MARKETING_RESERVE_AMOUNT()) {
+            mint(_rewardContract, cactt.MARKETING_RESERVE_AMOUNT());
+        }
+    }
+
+    function setRewardingContractAddress(address _newAddress)
+        public
+        onlyOperator
+    {
+        emit RewardingContractChanged(rewardingContract, _newAddress);
+        rewardingContract = _newAddress;
     }
 }
