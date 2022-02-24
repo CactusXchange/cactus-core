@@ -9,6 +9,7 @@ contract CactusWhitelist is Ownable {
     using SafeMath for uint256;
 
     ICactusToken public cactt;
+    address private payableAddress;
 
     mapping(address => HolderInfo) private _whitelistInfo;
 
@@ -33,8 +34,9 @@ contract CactusWhitelist is Ownable {
         bool payedInitial;
     }
 
-    constructor(ICactusToken _cactt) {
+    constructor(ICactusToken _cactt, address _payableAddress) {
         cactt = _cactt;
+        payableAddress = _payableAddress;
         operators[owner()] = true;
         emit OperatorUpdated(owner(), true);
     }
@@ -80,7 +82,7 @@ contract CactusWhitelist is Ownable {
             _whitelistHoldingCap >= holder.total.add(_cattAmount),
             "Amount exceeds holding limit!"
         );
-        payable(owner()).transfer(msg.value);
+        payable(payableAddress).transfer(msg.value);
         uint256 initialPayment = _cattAmount.div(2); // Release 50% of payment
         uint256 credit = _cattAmount.div(2);
 
