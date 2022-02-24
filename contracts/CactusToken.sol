@@ -26,7 +26,7 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
     uint256 private _rTotal;
     uint256 private _tFeeTotal;
 
-    uint256 public maxTxFeeBps = 4500;
+    uint256 public maxTxFeeBps = 2500;
 
     address public teamAddress;
     address public liquidityAddress = address(this);
@@ -159,6 +159,21 @@ contract CactusToken is Context, IERC20, BaseToken, IERC20Metadata {
             (, uint256 rTransferAmount, , , , , ) = _getValues(tAmount);
             return rTransferAmount;
         }
+    }
+
+    function setTaxFeePercent(uint256 taxFeeBps) public onlyOperator {
+        require(taxFeeBps >= 0 && taxFeeBps <= maxTxFeeBps, "Invalid bps");
+        _taxFee = taxFeeBps;
+    }
+
+    function setLiquidityFeePercent(uint256 liquidityFeeBps) public onlyOperator {
+        _liquidityFee = liquidityFeeBps;
+        require(_liquidityFee + _marketingFee <= maxTxFeeBps, "Invalid bps");
+    }
+
+    function setMarketingFeePercent(uint256 marketingFeeBps) public onlyOperator {
+        _marketingFee = marketingFeeBps;
+        require(_liquidityFee + _marketingFee <= maxTxFeeBps, "Invalid bps");
     }
 
     function tokenFromReflection(uint256 rAmount)
