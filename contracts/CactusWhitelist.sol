@@ -20,7 +20,7 @@ contract CactusWhitelist is Ownable {
     uint256 public whitelistSaleDistributed;
     uint256 private _newPaymentInterval = 2592000;
     uint256 private _whitelistHoldingCap = 96000 * 10**18;
-    uint256 private _minimumPruchaseInBNB = 2 * 10**18; // 3BNB
+    uint256 private _minimumPruchaseInBNB = 2 * 10**18; // 2BNB
     uint256 private _cattPerBNB = 9600; // current price as per the time of private sale
 
     mapping(address => bool) public operators;
