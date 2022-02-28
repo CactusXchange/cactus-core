@@ -5,22 +5,22 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/ICactusToken.sol";
 
-contract CactusWhitelist is Ownable {
+contract CactusPrivateSale is Ownable {
     using SafeMath for uint256;
 
     ICactusToken public cactt;
-    address private payableAddress;
+    address public payableAddress;
 
-    mapping(address => HolderInfo) private _whitelistInfo;
+    mapping(address => HolderInfo) private _privatesaleInfo;
 
-    bool public openWhitelist = false;
+    bool public openPrivatesale = false;
 
-    address[] private _whitelist;
+    address[] private _privatesale;
 
-    uint256 public whitelistSaleDistributed;
+    uint256 public privatesaleDistributed;
     uint256 private _newPaymentInterval = 2592000;
-    uint256 private _whitelistHoldingCap = 96000 * 10**18;
-    uint256 private _minimumPruchaseInBNB = 2 * 10**18; // 2BNB
+    uint256 private _privatesaleHoldingCap = 96000 * 10**18;
+    uint256 public _minimumPruchaseInBNB = 2 * 10**18; // 2BNB
     uint256 private _cattPerBNB = 9600; // current price as per the time of private sale
 
     mapping(address => bool) public operators;
@@ -41,7 +41,7 @@ contract CactusWhitelist is Ownable {
         emit OperatorUpdated(owner(), true);
     }
 
-    event WhitelistStatusChanged(
+    event PrivatesaleStatusChanged(
         bool indexed previusState,
         bool indexed newState
     );
@@ -57,29 +57,29 @@ contract CactusWhitelist is Ownable {
 
     event OperatorUpdated(address indexed operator, bool indexed status);
 
-    function registerWhitelist(address _account) external payable {
-        require(openWhitelist, "Sale is not in session.");
+    function registerPrivatesale(address _account) external payable {
+        require(openPrivatesale, "Sale is not in session.");
         require(msg.value > 0, "Invalid amount of BNB sent!");
         uint256 _cattAmount = msg.value * _cattPerBNB;
-        whitelistSaleDistributed = whitelistSaleDistributed.add(_cattAmount);
-        HolderInfo memory holder = _whitelistInfo[_account];
+        privatesaleDistributed = privatesaleDistributed.add(_cattAmount);
+        HolderInfo memory holder = _privatesaleInfo[_account];
         if (holder.total <= 0) {
-            _whitelist.push(_account);
+            _privatesale.push(_account);
         }
         require(
             msg.value >= _minimumPruchaseInBNB,
             "Minimum amount to buy is 2BNB"
         );
         require(
-            _cattAmount <= _whitelistHoldingCap,
+            _cattAmount <= _privatesaleHoldingCap,
             "You cannot hold more than 10BNB worth of DIBA"
         );
         require(
-            cactt.WHITELIST_ALLOCATION() >= whitelistSaleDistributed,
+            cactt.WHITELIST_ALLOCATION() >= privatesaleDistributed,
             "Distribution reached its max"
         );
         require(
-            _whitelistHoldingCap >= holder.total.add(_cattAmount),
+            _privatesaleHoldingCap >= holder.total.add(_cattAmount),
             "Amount exceeds holding limit!"
         );
         payable(payableAddress).transfer(msg.value);
@@ -92,26 +92,25 @@ contract CactusWhitelist is Ownable {
         holder.nextPaymentUntil = block.timestamp.add(_newPaymentInterval);
         holder.payedInitial = false;
         holder.initial = initialPayment;
-        _whitelistInfo[_account] = holder;
-        cactt.burn(owner(), _cattAmount);
+        _privatesaleInfo[_account] = holder;
     }
 
     function initialPaymentRelease() public onlyOperator {
-        for (uint256 i = 0; i < _whitelist.length; i++) {
-            HolderInfo memory holder = _whitelistInfo[_whitelist[i]];
+        for (uint256 i = 0; i < _privatesale.length; i++) {
+            HolderInfo memory holder = _privatesaleInfo[_privatesale[i]];
             if (!holder.payedInitial) {
                 uint256 amount = holder.initial;
                 holder.payedInitial = true;
                 holder.initial = 0;
-                _whitelistInfo[_whitelist[i]] = holder;
-                cactt.mint(_whitelist[i], amount);
+                _privatesaleInfo[_privatesale[i]] = holder;
+                cactt.mint(_privatesale[i], amount);
             }
         }
     }
 
-    function timelyWhitelistPaymentRelease() public onlyOperator {
-        for (uint256 i = 0; i < _whitelist.length; i++) {
-            HolderInfo memory holder = _whitelistInfo[_whitelist[i]];
+    function timelyPrivatesalePaymentRelease() public onlyOperator {
+        for (uint256 i = 0; i < _privatesale.length; i++) {
+            HolderInfo memory holder = _privatesaleInfo[_privatesale[i]];
             if (
                 holder.amountLocked > 0 &&
                 block.timestamp >= holder.nextPaymentUntil
@@ -122,8 +121,8 @@ contract CactusWhitelist is Ownable {
                 holder.nextPaymentUntil = block.timestamp.add(
                     _newPaymentInterval
                 );
-                _whitelistInfo[_whitelist[i]] = holder;
-                cactt.mint(_whitelist[i], holder.monthlyCredit);
+                _privatesaleInfo[_privatesale[i]] = holder;
+                cactt.mint(_privatesale[i], holder.monthlyCredit);
             }
         }
     }
@@ -133,7 +132,11 @@ contract CactusWhitelist is Ownable {
         view
         returns (HolderInfo memory)
     {
-        return _whitelistInfo[_holderAddress];
+        return _privatesaleInfo[_holderAddress];
+    }
+
+    function changePayableAddress(address _payableAddress) public onlyOperator {
+      payableAddress = _payableAddress;
     }
 
     function updateOperator(address _operator, bool _status)
@@ -144,8 +147,23 @@ contract CactusWhitelist is Ownable {
         emit OperatorUpdated(_operator, _status);
     }
 
-    function setWhitelistStatus(bool status) public onlyOperator {
-        emit WhitelistStatusChanged(openWhitelist, status);
-        openWhitelist = status;
+    function setMinimumCact(uint256 _amount) public onlyOperator {
+        _minimumPruchaseInBNB = _amount;
+    }
+
+    function enablePrivatesale() public onlyOperator {
+        if (!openPrivatesale) {
+            emit PrivatesaleStatusChanged(false, true);
+            openPrivatesale = true;
+            uint256 privatesaleBalance = cactt.WHITELIST_ALLOCATION().sub(
+                privatesaleDistributed
+            );
+            cactt.burn(owner(), privatesaleBalance);
+        }
+    }
+
+    function closePrivatesale() public onlyOperator {
+        emit PrivatesaleStatusChanged(true, false);
+        openPrivatesale = false;
     }
 }
